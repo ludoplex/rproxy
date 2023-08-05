@@ -60,6 +60,7 @@
 
 """
 
+
 __author__ = 'William McBrine <wmcbrine@gmail.com>'
 __version__ = '0.7'
 __license__ = 'GPL'
@@ -70,7 +71,7 @@ import socket
 import sys
 import time
 
-if 3 == sys.version_info[0]:
+if sys.version_info[0] == 3:
     import _thread
     from queue import Queue
     inp = input
@@ -120,10 +121,11 @@ class ZCBroadcast:
             prop = {'TSN': '648000000000000', 'path': '/',
                     'protocol': 'tivo-remote', 'swversion': '0.0',
                     'platform': 'tcd/Series3'}
-        name = 'Proxy(%s)' % name
+        name = f'Proxy({name})'
 
-        self.info = zeroconf.ServiceInfo(SERVICE, '%s.%s' % (name, SERVICE),
-                                         host_ip, port, 0, 0, prop)
+        self.info = zeroconf.ServiceInfo(
+            SERVICE, f'{name}.{SERVICE}', host_ip, port, 0, 0, prop
+        )
         self.rz.registerService(self.info)
 
     def find_tivos(self, all=False):
@@ -144,16 +146,15 @@ class ZCBroadcast:
             for t in tivo_names[:]:
                 if t.startswith('Proxy('):
                     try:
-                        t = t.replace('.' + SERVICE, '')[6:-1] + '.' + SERVICE
+                        t = t.replace(f'.{SERVICE}', '')[6:-1] + '.' + SERVICE
                         tivo_names.remove(t)
                     except:
                         pass
 
         # Now get the addresses and properties -- this is the slow part
         for t in tivo_names:
-            s = self.rz.getServiceInfo(SERVICE, t)
-            if s:
-                name = t.replace('.' + SERVICE, '')
+            if s := self.rz.getServiceInfo(SERVICE, t):
+                name = t.replace(f'.{SERVICE}', '')
                 address = socket.inet_ntoa(s.getAddress())
                 port = s.getPort()
                 prop = s.getProperties()
@@ -163,7 +164,7 @@ class ZCBroadcast:
             # For proxies with numeric names, remove the original
             for t in tivo_names:
                 if t.startswith('Proxy('):
-                    address = t.replace('.' + SERVICE, '')[6:-1]
+                    address = t.replace(f'.{SERVICE}', '')[6:-1]
                     for key in list(tivos.keys()):
                         if key[0] == address:
                             tivos.pop(key)
@@ -298,10 +299,7 @@ class Proxy:
 
         """
         addr, port = self.host_port
-        if port == DEFAULT_HOST[1]:
-            tries = 10
-        else:
-            tries = 1
+        tries = 10 if port == DEFAULT_HOST[1] else 1
         server = socket.socket()
         while tries:
             try:
@@ -348,19 +346,17 @@ def dump(tivos, verbose):
         print('%s:%d - %s' % (address, port, name))
         if verbose:
             for pkey, pdata in prop.items():
-                print(' %s: %s' % (pkey, pdata))
+                print(f' {pkey}: {pdata}')
             print('')
 
 def choose(tivos):
     """ List TiVos found, and allow user to choose one. """
     choices = {}
-    i = 1
-    for key, data in tivos.items():
+    for i, (key, data) in enumerate(tivos.items(), start=1):
         choices[str(i)] = key
         address, port = key
         name, prop = data
         print('%d. %s:%d - %s' % (i, address, port, name))
-        i += 1
     choice = inp('Connect to which? ')
     return choices.get(choice)
 
@@ -392,8 +388,7 @@ def get_target(tivos, target, tmode, verbose):
         sys.stderr.write('No TiVos available\n')
         return None
 
-    address = by_name(tivos, target)
-    if address:
+    if address := by_name(tivos, target):
         return address
 
     if ':' in target:
@@ -455,8 +450,6 @@ def parse_cmdline(params):
     return targets, (host, port), use_zc, verbose, tmode, recon
 
 def main(argv):
-    tivos = {}
-
     targets, host_port, use_zc, verbose, tmode, recon = parse_cmdline(argv)
 
     if use_zc:
@@ -464,16 +457,12 @@ def main(argv):
             zc = ZCBroadcast()
         except:
             use_zc = False
-        if use_zc:
-            tivos = zc.find_tivos(tmode == _TLIST)
-
+    tivos = zc.find_tivos(tmode == _TLIST) if use_zc else {}
     try:
         target = targets[0]
     except:
         target = None
-    target = get_target(tivos, target, tmode, verbose)
-
-    if target:
+    if target := get_target(tivos, target, tmode, verbose):
         if use_zc:
             zc.announce(target, host_port, tivos)
         Proxy(target, host_port, verbose, recon)
